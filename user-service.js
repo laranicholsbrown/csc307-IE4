@@ -2,42 +2,51 @@ import mongoose from "mongoose";
 import userModel from "../models/user.js";
 import dotenv from "dotenv";
 
+mongoose.set("debug", true);
 dotenv.config();
 
-// Helper function to build the URI from your 3 variables
 function getMongoURI(dbname) {
-  let connection_string = `mongodb://localhost:27017/${dbname}`;
-  const { MONGO_USER, MONGO_PWD, MONGO_CLUSTER } = process.env;
+  // Pull the single connection string from the environment
+  const connection_string = process.env.MONGO_CONNECTION_STRING;
 
-  if (MONGO_USER && MONGO_PWD && MONGO_CLUSTER) {
-    // This builds the Atlas SRV string
-    connection_string = `mongodb+srv://${MONGO_USER}:${MONGO_PWD}@${MONGO_CLUSTER}/${dbname}?retryWrites=true&w=majority`;
+  if (!connection_string) {
+    console.error(
+      "Error: MONGO_CONNECTION_STRING is not defined in .env"
+    );
+    return "";
   }
-  return connection_string;
+
+  // Ensure there is exactly one slash between the URI and the dbname
+  const baseURI = connection_string.endsWith("/")
+    ? connection_string
+    : `${connection_string}/`;
+
+  const finalURI = `${baseURI}${dbname}?retryWrites=true&w=majority`;
+
+  console.log("Connecting to MongoDB database:", dbname);
+  return finalURI;
 }
 
-mongoose.set("debug", true);
-
-// Connect using the helper function
+// Mongoose 6+ does not need useNewUrlParser or useUnifiedTopology
 mongoose
   .connect(getMongoURI("users"))
-  .then(() =>
-    console.log("Connected to MongoDB Atlas successfully!")
-  )
-  .catch((error) => console.log("Connection Error: ", error));
+  .then(() => console.log("Successfully connected to MongoDB"))
+  .catch((error) => console.log("Connection Error:", error));
 
-// --- SERVICE STUBS ---
+function addUser(user) {
+  const userToAdd = new userModel(user);
+  return userToAdd.save();
+}
 
 function getUsers(name, job) {
-  if (name && job) {
-    // New Task: Match both
-    return userModel.find({ name: name, job: job });
-  } else if (name) {
-    return userModel.find({ name: name });
-  } else if (job) {
-    return userModel.find({ job: job });
-  } else {
+  if (name === undefined && job === undefined) {
     return userModel.find();
+  } else if (name && !job) {
+    return findUserByName(name);
+  } else if (job && !name) {
+    return findUserByJob(job);
+  } else {
+    return userModel.find({ name: name, job: job });
   }
 }
 
@@ -45,13 +54,15 @@ function findUserById(id) {
   return userModel.findById(id);
 }
 
-function addUser(user) {
-  const userToAdd = new userModel(user);
-  return userToAdd.save();
+function findUserByName(name) {
+  return userModel.find({ name: name });
 }
 
-function removeUserById(id) {
-  // New Task: Use findByIdAndDelete
+function findUserByJob(job) {
+  return userModel.find({ job: job });
+}
+
+function removeUser(id) {
   return userModel.findByIdAndDelete(id);
 }
 
@@ -59,5 +70,7 @@ export default {
   addUser,
   getUsers,
   findUserById,
-  removeUserById
+  findUserByName,
+  findUserByJob,
+  removeUser
 };
